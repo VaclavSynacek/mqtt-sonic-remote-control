@@ -31,10 +31,15 @@
 // Update these with values suitable for your network.
 #include "secrets.h"
 
+#define TRIGGER 5
+#define ECHO    4
+// NodeMCU Pin D1 = GPIO5 > TRIGGER | Pin D2 = GPIO4 > ECHO
+
 WiFiClient espClient;
 PubSubClient client(espClient);
 long lastMsg = 0;
 char msg[50];
+char readout[50];
 int value = 0;
 
 void setup_wifi() {
@@ -107,9 +112,27 @@ void reconnect() {
 void setup() {
   pinMode(BUILTIN_LED, OUTPUT);     // Initialize the BUILTIN_LED pin as an output
   Serial.begin(115200);
+  pinMode(TRIGGER, OUTPUT);
+  pinMode(ECHO, INPUT);
   setup_wifi();
   client.setServer(mqtt_server, 1883);
   client.setCallback(callback);
+}
+
+long getDistance() {
+  
+  long duration, distance;
+  digitalWrite(TRIGGER, LOW);  
+  delayMicroseconds(2); 
+  
+  digitalWrite(TRIGGER, HIGH);
+  delayMicroseconds(10); 
+  
+  digitalWrite(TRIGGER, LOW);
+  duration = pulseIn(ECHO, HIGH);
+  distance = (duration/2) / 29.1;
+  
+  return distance;
 }
 
 void loop() {
@@ -120,12 +143,14 @@ void loop() {
   client.loop();
 
   long now = millis();
-  if (now - lastMsg > 2000) {
+  if (now - lastMsg > 50) {
     lastMsg = now;
     ++value;
     snprintf (msg, 50, "hello world #%ld", value);
+    snprintf (readout, 50, "%ld", getDistance());
     Serial.print("Publish message: ");
     Serial.println(msg);
+    client.publish("distance", readout);
     client.publish("outTopic", msg);
   }
 }
