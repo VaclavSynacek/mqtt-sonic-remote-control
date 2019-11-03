@@ -1,28 +1,17 @@
 /*
- Basic ESP8266 MQTT example
- created by Nick O'Leary - https://github.com/knolleary
- taken from https://github.com/knolleary/pubsubclient/blob/master/examples/mqtt_esp8266/mqtt_esp8266.ino
+ MQTT Sonic Remote Control
 
- This sketch demonstrates the capabilities of the pubsub library in combination
- with the ESP8266 board/library.
+   NodeMCU and Ultrasonic sensor connected to MQTT broker sending
+   distance measurements every 50ms. Eventually will evolve into
+   kind of a poor man's gesture based remote control.
 
- It connects to an MQTT server then:
-  - publishes "hello world" to the topic "outTopic" every two seconds
-  - subscribes to the topic "inTopic", printing out any messages
-    it receives. NB - it assumes the received payloads are strings not binary
-  - If the first character of the topic "inTopic" is an 1, switch ON the ESP Led,
-    else switch it off
-
- It will reconnect to the server if the connection is lost using a blocking
- reconnect function. See the 'mqtt_reconnect_nonblocking' example for how to
- achieve the same result without blocking the main loop.
-
- To install the ESP8266 board, (using Arduino 1.6.4+):
-  - Add the following 3rd party board manager under "File -> Preferences -> Additional Boards Manager URLs":
-       http://arduino.esp8266.com/stable/package_esp8266com_index.json
-  - Open the "Tools -> Board -> Board Manager" and click install for the ESP8266"
-  - Select your ESP8266 in "Tools -> Board"
-
+   Idea inspired by https://www.youtube.com/watch?v=VdtUOSBrZIo
+   but removing the PIR, adding MQTT and chnging arduino to NodeMCU.
+ 
+ Code structue originally based on:
+   Basic ESP8266 MQTT example
+   created by Nick O'Leary - https://github.com/knolleary
+   taken from https://github.com/knolleary/pubsubclient/blob/master/examples/mqtt_esp8266/mqtt_esp8266.ino
 */
 
 #include <ESP8266WiFi.h>
@@ -35,21 +24,17 @@
 #define ECHO    4
 // NodeMCU Pin D1 = GPIO5 > TRIGGER | Pin D2 = GPIO4 > ECHO
 
+#define DISTANCE_TOPIC "distance"
+
 WiFiClient espClient;
 PubSubClient client(espClient);
-long lastMsg = 0;
-char msg[50];
+long lastMeasurementTimestamp = 0;
 char readout[50];
-int value = 0;
 
 void setup_wifi() {
+  Serial.print("Connectig to WiFi ");
 
   delay(10);
-  // We start by connecting to a WiFi network
-  Serial.println();
-  Serial.print("Connecting to ");
-  Serial.println(ssid);
-
   WiFi.begin(ssid, password);
 
   while (WiFi.status() != WL_CONNECTED) {
@@ -61,62 +46,30 @@ void setup_wifi() {
 
   Serial.println("");
   Serial.println("WiFi connected");
-  Serial.println("IP address: ");
+  Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
 }
 
-void callback(char* topic, byte* payload, unsigned int length) {
-  Serial.print("Message arrived [");
-  Serial.print(topic);
-  Serial.print("] ");
-  for (int i = 0; i < length; i++) {
-    Serial.print((char)payload[i]);
-  }
-  Serial.println();
-
-  // Switch on the LED if an 1 was received as first character
-  if ((char)payload[0] == '1') {
-    digitalWrite(BUILTIN_LED, LOW);   // Turn the LED on (Note that LOW is the voltage level
-    // but actually the LED is on; this is because
-    // it is active low on the ESP-01)
-  } else {
-    digitalWrite(BUILTIN_LED, HIGH);  // Turn the LED off by making the voltage HIGH
-  }
-
-}
-
 void reconnect() {
-  // Loop until we're reconnected
   while (!client.connected()) {
-    Serial.print("Attempting MQTT connection...");
-    // Create a random client ID
-    String clientId = "ESP8266Client-";
-    clientId += String(random(0xffff), HEX);
-    // Attempt to connect
-    if (client.connect(clientId.c_str())) {
-      Serial.println("connected");
-      // Once connected, publish an announcement...
-      client.publish("outTopic", "hello world");
-      // ... and resubscribe
-      client.subscribe("inTopic");
-    } else {
-      Serial.print("failed, rc=");
-      Serial.print(client.state());
-      Serial.println(" try again in 5 seconds");
-      // Wait 5 seconds before retrying
-      delay(5000);
+    Serial.println("Connecting to MQTT ");
+    String clientId = "ESP8266-sonic-remote-control";
+    if (!client.connect(clientId.c_str())) {
+      Serial.print(".");
+      delay(500);
     }
   }
 }
 
 void setup() {
-  pinMode(BUILTIN_LED, OUTPUT);     // Initialize the BUILTIN_LED pin as an output
+  Serial.println("");
   Serial.begin(115200);
+  Serial.println("");
+  Serial.println("MQTT-Sonic-Remote-Control");
   pinMode(TRIGGER, OUTPUT);
   pinMode(ECHO, INPUT);
   setup_wifi();
   client.setServer(mqtt_server, 1883);
-  client.setCallback(callback);
 }
 
 long getDistance() {
@@ -143,14 +96,12 @@ void loop() {
   client.loop();
 
   long now = millis();
-  if (now - lastMsg > 50) {
-    lastMsg = now;
-    ++value;
-    snprintf (msg, 50, "hello world #%ld", value);
+  if (now - lastMeasurementTimestamp > 50) {
+    lastMeasurementTimestamp = now;
     snprintf (readout, 50, "%ld", getDistance());
-    Serial.print("Publish message: ");
-    Serial.println(msg);
-    client.publish("distance", readout);
-    client.publish("outTopic", msg);
+    Serial.print("Measured distance is ");
+    Serial.print(readout);
+    Serial.println(" cm.");
+    client.publish(DISTANCE_TOPIC, readout);
   }
 }
