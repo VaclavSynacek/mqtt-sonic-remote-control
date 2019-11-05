@@ -24,12 +24,10 @@
 #define ECHO    4
 // NodeMCU Pin D1 = GPIO5 > TRIGGER | Pin D2 = GPIO4 > ECHO
 
-#define DISTANCE_TOPIC "distance"
+#define TOPIC "command"
 
 WiFiClient espClient;
 PubSubClient client(espClient);
-long lastMeasurementTimestamp = 0;
-char readout[50];
 
 void setup_wifi() {
   Serial.print("Connectig to WiFi ");
@@ -88,6 +86,24 @@ long getDistance() {
   return distance;
 }
 
+
+const int OUT = 10;
+const int UP = 5;
+const int DOWN = 3;
+const int ENTER = 0;
+
+int toState(int distance) {
+  if (distance < 10) return ENTER;
+  if (distance < 30) return DOWN;
+  if (distance < 100) return UP;
+  return OUT;
+}
+
+long previousStateSince = 0;
+long now = 0;
+int previousState = OUT;
+int currentState = OUT;
+
 void loop() {
 
   if (!client.connected()) {
@@ -95,13 +111,29 @@ void loop() {
   }
   client.loop();
 
-  long now = millis();
-  if (now - lastMeasurementTimestamp > 50) {
-    lastMeasurementTimestamp = now;
-    snprintf (readout, 50, "%ld", getDistance());
-    Serial.print("Measured distance is ");
-    Serial.print(readout);
-    Serial.println(" cm.");
-    client.publish(DISTANCE_TOPIC, readout);
+  currentState = toState(getDistance());
+  now = millis();
+
+  if (currentState == previousState) {
+    if (now - previousStateSince > 300) {
+      previousStateSince = now;
+      switch(currentState) { //when I write section like this I do miss Lisp
+        case ENTER:
+          client.publish(TOPIC, "enter");
+          break;
+        case UP:
+          client.publish(TOPIC, "up");
+          break;
+        case DOWN:
+          client.publish(TOPIC, "down");
+          break;
+        case OUT:
+          client.publish(TOPIC, "out");
+          break;
+      }
+    }
+  } else {
+    previousStateSince = now;
+    previousState = currentState;
   }
 }
