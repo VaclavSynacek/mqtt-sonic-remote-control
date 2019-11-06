@@ -68,6 +68,8 @@ void setup() {
   pinMode(ECHO, INPUT);
   setup_wifi();
   client.setServer(mqtt_server, 1883);
+  reconnect();
+  client.publish(TOPIC, "start");
 }
 
 long getDistance() {
@@ -115,7 +117,7 @@ void loop() {
   now = millis();
 
   if (currentState == previousState) {
-    if (now - previousStateSince > 300) {
+    if (now - previousStateSince > 1000) {
       previousStateSince = now;
       switch(currentState) { //when I write section like this I do miss Lisp
         case ENTER:
