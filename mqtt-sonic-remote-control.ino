@@ -102,6 +102,8 @@ int toState(int distance) {
 }
 
 long previousStateSince = 0;
+long withoutChangeSince = 0;
+bool goingToSleep = false;
 long now = 0;
 int previousState = OUT;
 int currentState = OUT;
@@ -112,6 +114,10 @@ void loop() {
     reconnect();
   }
   client.loop();
+
+  if(goingToSleep){
+    ESP.deepSleep(0); 
+  }
 
   currentState = toState(getDistance());
   now = millis();
@@ -134,8 +140,13 @@ void loop() {
           break;
       }
     }
+    if (now - withoutChangeSince > 30000) {
+      client.publish(TOPIC, "goodbye");
+      goingToSleep = true;
+    }
   } else {
     previousStateSince = now;
+    withoutChangeSince = now;
     previousState = currentState;
   }
 }
